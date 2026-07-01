@@ -130,3 +130,37 @@ export async function salvarOverride(cenarioId, ov, quemEmail) {
 // ---- helpers de id (Firestore não aceita / nem espaços em ids) ----
 function enc(s) { return String(s ?? "").replace(/[/\\.#$[\]\s]+/g, "_"); }
 function encId(s) { return enc(s); }
+
+// ---- projeção POR CLIENTE (nível cliente+vendedor) ----
+// doc id inclui vendedor. campos: vol{Jul..Dez}, preco{Jul..Dez}
+export async function lerProjecaoCliente(cenarioId, supNome) {
+  const col = collection(db, "cenarios", cenarioId, "projcli");
+  const qs = supNome
+    ? await getDocs(query(col, where("sup", "==", supNome)))
+    : await getDocs(col);
+  const out = {};
+  qs.forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+
+// salva várias linhas de projeção por cliente em lote
+export async function salvarProjecaoCliente(cenarioId, itens, quemEmail, onProgress) {
+  let feitos = 0;
+  for (let i = 0; i < itens.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const it of itens.slice(i, i + 400)) {
+      const id = [it.filial, it.canal, it.sup, it.produto, it.cliente, it.loja || "01", it.vend]
+        .map((s) => String(s ?? "").replace(/[/\\.#$[\]\s]+/g, "_")).join("__");
+      batch.set(doc(db, "cenarios", cenarioId, "projcli", id), {
+        filial: it.filial, canal: it.canal, sup: it.sup, vend: it.vend,
+        produto: it.produto, cliente: it.cliente, loja: it.loja || "01",
+        vol: it.vol || {}, preco: it.preco || {},
+        atualizadoPor: quemEmail, atualizadoEm: Date.now(),
+      }, { merge: true });
+    }
+    await batch.commit();
+    feitos = Math.min(itens.length, i + 400);
+    onProgress?.(feitos, itens.length);
+  }
+  return feitos;
+}

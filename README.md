@@ -66,3 +66,21 @@ Canais considerados: Indústria, Atacarejo, Varejo, Farelo.
 A estrutura do Firestore espelha o schema `pco` do DW. Quando o banco
 liberar, trocamos a fonte (`src/lib/store.js`) por chamadas à API, sem
 mexer nas telas.
+
+---
+
+## Novidades desta versão (v2)
+- Dimensão VENDEDOR (abaixo do supervisor). Cada cliente traz seu vendedor.
+- Projeção no nível produto × cliente × vendedor × mês, pré-preenchida com a
+  média histórica de cada cliente.
+- Exportar/Importar Excel na tela do supervisor:
+  - "Exportar Excel": baixa a projeção atual (1 linha por produto×cliente×vendedor,
+    colunas Vol Jul..Dez e Preço Jul..Dez).
+  - Edite no Excel e use "Importar Excel" para atualizar. A importação valida que
+    as linhas pertencem ao supervisor logado (segurança).
+- Barra de totais no topo da tela do supervisor (volume, receita, preço médio).
+
+## Formato da base (atualizado)
+Agora inclui a coluna **Vendedor**. Colunas: Filial, Canal, Supervisor, Vendedor,
+Produto, Cliente, Volume, Preço médio, Mês. Canais considerados nesta base:
+Indústria, Atacarejo, Varejo (ajustável em src/lib/planilha.js).

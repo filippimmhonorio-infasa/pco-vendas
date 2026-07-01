@@ -161,6 +161,7 @@ function AbaBase({ cenario, setCenario }) {
               <Stat label="Filiais" v={preview.resumo.filiais} />
               <Stat label="Canais" v={preview.resumo.canais} />
               <Stat label="Supervisores" v={preview.resumo.supervisores} />
+              {preview.resumo.vendedores != null && <Stat label="Vendedores" v={preview.resumo.vendedores} />}
               <Stat label="Produtos" v={preview.resumo.produtos} />
               <Stat label="Clientes" v={preview.resumo.clientes} />
               <Stat label="Volume médio/mês" v={fmt(preview.resumo.volMedMensal) + " t"} />
