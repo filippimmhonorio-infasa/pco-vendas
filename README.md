@@ -84,3 +84,17 @@ mexer nas telas.
 Agora inclui a coluna **Vendedor**. Colunas: Filial, Canal, Supervisor, Vendedor,
 Produto, Cliente, Volume, Preço médio, Mês. Canais considerados nesta base:
 Indústria, Atacarejo, Varejo (ajustável em src/lib/planilha.js).
+
+---
+
+## Novidades v3 (tela do supervisor)
+- Abas: "Projeção" e "Resumo por vendedor".
+- Filtros na tela: menu de vendedor + busca de cliente (além da busca de produto).
+- Botão "replicar" por cliente: copia o volume de Julho para Ago–Dez.
+- Resumo por vendedor: volume, receita, preço médio e nº de clientes de cada
+  vendedor; atualiza conforme você edita, com aviso de "alterações não salvas".
+- Botão "Ver" no resumo leva direto à projeção já filtrada por aquele vendedor.
+- Correção: a tela agora mostra mensagem de erro em vez de travar no carregamento.
+
+> Lembrete: se aparecer erro de permissão do Firestore, confirme que as Regras
+> incluem a coleção `projcli` (ver firestore.rules).
