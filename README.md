@@ -98,3 +98,18 @@ Indústria, Atacarejo, Varejo (ajustável em src/lib/planilha.js).
 
 > Lembrete: se aparecer erro de permissão do Firestore, confirme que as Regras
 > incluem a coleção `projcli` (ver firestore.rules).
+
+---
+
+## Novidades v4 — Orçado × Realizado
+- Nova aba "Realizado" no admin: importa a planilha de vendas realizadas
+  (mesmo formato da base, com volume e faturamento). Cada importação substitui
+  o realizado anterior.
+- Nova aba "Orçado × Realizado" (admin vê tudo; supervisor vê o dele):
+  compara orçado e realizado nos MESMOS meses que já têm realizado (acumulado),
+  agregável por filial, canal, supervisor, vendedor ou produto. Mostra volume,
+  receita, desvio e % de atingimento, com cores (verde ≥100%, âmbar ≥85%, vermelho abaixo).
+
+## IMPORTANTE ao atualizar para v4
+Atualize as Regras do Firestore (arquivo firestore.rules) — foi adicionada a
+coleção `realizado`. Sem isso, a importação de realizado dá erro de permissão.

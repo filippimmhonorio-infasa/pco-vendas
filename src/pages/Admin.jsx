@@ -1,17 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { processarPlanilha } from "../lib/planilha.js";
+import { processarRealizado } from "../lib/realizado.js";
 import {
   getCenarioAtivo, criarCenario, gravarBase, lerBase,
-  listarAcessos, salvarAcesso,
+  listarAcessos, salvarAcesso, gravarRealizado,
 } from "../lib/store.js";
+import OrcadoRealizado from "./OrcadoRealizado.jsx";
 import {
   Upload, FileSpreadsheet, CheckCircle2, Users, BarChart3,
-  Building2, AlertTriangle, Plus, Loader2,
+  Building2, AlertTriangle, Plus, Loader2, TrendingUp, ClipboardCheck,
 } from "lucide-react";
 
 const ABAS = [
   { id: "base", nome: "Base do cenário", icon: FileSpreadsheet },
   { id: "consolidado", nome: "Consolidação", icon: BarChart3 },
+  { id: "realizado", nome: "Realizado", icon: ClipboardCheck },
+  { id: "oxr", nome: "Orçado × Realizado", icon: TrendingUp },
   { id: "usuarios", nome: "Supervisores", icon: Users },
 ];
 
@@ -45,9 +49,93 @@ export default function Admin({ acesso }) {
 
       {carregando
         ? <p style={{ color: "var(--sub)" }}><span className="spin" /> Carregando cenário…</p>
-        : aba === "base" ? <AbaBase cenario={cenario} setCenario={setCenario} adminEmail={acesso ? undefined : undefined} />
+        : aba === "base" ? <AbaBase cenario={cenario} setCenario={setCenario} />
         : aba === "consolidado" ? <AbaConsolidado cenario={cenario} />
+        : aba === "realizado" ? <AbaRealizado cenario={cenario} setCenario={setCenario} />
+        : aba === "oxr" ? <OrcadoRealizado />
         : <AbaUsuarios cenario={cenario} />}
+    </div>
+  );
+}
+
+/* ---------- Aba: Realizado (upload da planilha de realizado) ---------- */
+function AbaRealizado({ cenario, setCenario }) {
+  const fileRef = useRef();
+  const [preview, setPreview] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [gravando, setGravando] = useState(false);
+  const [progresso, setProgresso] = useState(null);
+  const [ok, setOk] = useState(false);
+
+  const NUM_MES = { 7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez" };
+
+  function escolher(e) {
+    setErro(null); setOk(false); setPreview(null);
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { setPreview(processarRealizado(reader.result)); }
+      catch (err) { setErro(err.message); }
+    };
+    reader.onerror = () => setErro("Não consegui ler o arquivo.");
+    reader.readAsArrayBuffer(f);
+  }
+
+  async function confirmar() {
+    if (!preview || !cenario) return;
+    setGravando(true); setErro(null);
+    try {
+      await gravarRealizado(cenario.id, preview.itens,
+        { meses: preview.meses, atualizadoEm: Date.now() },
+        (fase, feito, total) => setProgresso({ fase, feito, total }));
+      setOk(true); setPreview(null);
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err) { setErro("Falha ao gravar: " + err.message); }
+    setGravando(false); setProgresso(null);
+  }
+
+  if (!cenario) return <div className="card" style={{ color: "var(--sub)" }}>
+    Crie um cenário e importe a base antes de importar o realizado.</div>;
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0, fontSize: 17 }}>Importar realizado</h2>
+      <p style={{ color: "var(--sub)", fontSize: 13, marginTop: 4 }}>
+        Envie a planilha de vendas realizadas (mesmo formato da base: filial, canal,
+        supervisor, vendedor, produto, cliente, volume, faturamento, mês). Cada importação
+        <b> substitui</b> o realizado anterior. A comparação usa os meses presentes na planilha.
+      </p>
+
+      <div style={{ marginTop: 14 }}>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={escolher} style={{ display: "none" }} id="realFile" />
+        <label htmlFor="realFile" className="btn btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Upload size={16} /> Escolher planilha de realizado
+        </label>
+      </div>
+
+      {erro && <div style={aviso("bad")}><AlertTriangle size={16} /> {erro}</div>}
+      {ok && <div style={aviso("ok")}><CheckCircle2 size={16} /> Realizado importado com sucesso. Veja em "Orçado × Realizado".</div>}
+
+      {preview && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Conferência antes de gravar</div>
+          <div style={grid}>
+            <Stat label="Linhas lidas" v={preview.resumo.linhasLidas} />
+            <Stat label="Descartadas" v={preview.resumo.descartadas} />
+            <Stat label="Registros" v={preview.resumo.itens} />
+            <Stat label="Meses" v={preview.meses.map((m) => NUM_MES[m]).join(", ")} />
+            <Stat label="Volume total" v={fmt(preview.resumo.volTotal) + " t"} />
+            <Stat label="Receita total" v={fmtBRL(preview.resumo.recTotal)} />
+          </div>
+          <button className="btn" style={{ marginTop: 12 }} onClick={confirmar} disabled={gravando}>
+            {gravando
+              ? <><Loader2 size={16} className="spin" style={{ verticalAlign: "-3px", marginRight: 6 }} />
+                  {progresso ? `${progresso.fase} ${progresso.feito}/${progresso.total}…` : "Gravando…"}</>
+              : "Gravar realizado (substitui o anterior)"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

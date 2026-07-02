@@ -48,6 +48,14 @@ service cloud.firestore {
         allow read: if temAcesso();
         allow write: if temAcesso();
       }
+      match /projcli/{doc} {
+        allow read: if temAcesso();
+        allow write: if temAcesso();
+      }
+      match /realizado/{doc} {
+        allow read: if temAcesso();
+        allow write: if ehAdmin();
+      }
     }
   }
 }

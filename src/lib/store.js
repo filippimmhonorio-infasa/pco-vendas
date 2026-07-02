@@ -164,3 +164,51 @@ export async function salvarProjecaoCliente(cenarioId, itens, quemEmail, onProgr
   }
   return feitos;
 }
+
+// ---- REALIZADO (importado por planilha; substitui tudo a cada carga) ----
+// doc por chave; guarda mesesVol{} e mesesRec{}. Campo 'sup' para filtro por supervisor.
+export async function lerRealizado(cenarioId, supNome) {
+  const col = collection(db, "cenarios", cenarioId, "realizado");
+  const qs = supNome
+    ? await getDocs(query(col, where("sup", "==", supNome)))
+    : await getDocs(col);
+  const out = [];
+  qs.forEach((d) => out.push(d.data()));
+  return out;
+}
+
+// apaga todo o realizado do cenário (para substituir)
+async function limparRealizado(cenarioId, onProgress) {
+  const col = collection(db, "cenarios", cenarioId, "realizado");
+  const qs = await getDocs(col);
+  const docs = qs.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = writeBatch(db);
+    docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    onProgress?.(Math.min(docs.length, i + 400), docs.length);
+  }
+  return docs.length;
+}
+
+// grava o realizado (substitui: limpa antes, depois insere)
+export async function gravarRealizado(cenarioId, itens, meta, onProgress) {
+  await limparRealizado(cenarioId, (f, t) => onProgress?.("limpando", f, t));
+  for (let i = 0; i < itens.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const it of itens.slice(i, i + 400)) {
+      const id = [it.filial, it.canal, it.sup, it.vend, it.produto, it.cliente, it.loja || "01"]
+        .map((s) => String(s ?? "").replace(/[/\\.#$[\]\s]+/g, "_")).join("__");
+      batch.set(doc(db, "cenarios", cenarioId, "realizado", id), {
+        filial: it.filial, canal: it.canal, sup: it.sup, vend: it.vend,
+        produto: it.produto, cliente: it.cliente, loja: it.loja || "01",
+        mesesVol: it.mesesVol || {}, mesesRec: it.mesesRec || {},
+      });
+    }
+    await batch.commit();
+    onProgress?.("gravando", Math.min(itens.length, i + 400), itens.length);
+  }
+  // guarda metadados (meses disponíveis) no doc do cenário
+  await setDoc(doc(db, "cenarios", cenarioId), { realizadoMeta: meta }, { merge: true });
+  return itens.length;
+}

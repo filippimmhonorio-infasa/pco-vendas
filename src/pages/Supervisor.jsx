@@ -5,10 +5,11 @@ import {
 } from "../lib/store.js";
 import { MESES } from "../lib/rateio.js";
 import { exportarExcel, importarExcel, idCliente } from "../lib/exportacao.js";
+import OrcadoRealizado from "./OrcadoRealizado.jsx";
 import {
   Package, ChevronDown, ChevronRight, Save, Search,
   CheckCircle2, Loader2, Download, Upload, AlertTriangle, Users,
-  Copy, Filter, BarChart3, ListTree,
+  Copy, Filter, BarChart3, ListTree, TrendingUp,
 } from "lucide-react";
 
 export default function Supervisor({ acesso }) {
@@ -253,7 +254,7 @@ export default function Supervisor({ acesso }) {
 
       {/* abas */}
       <div style={{ display: "flex", gap: 6, margin: "12px 0", borderBottom: "1px solid var(--line)" }}>
-        {[["projecao", "Projeção", ListTree], ["resumo", "Resumo por vendedor", BarChart3]].map(([id, nome, Ic]) => {
+        {[["projecao", "Projeção", ListTree], ["resumo", "Resumo por vendedor", BarChart3], ["oxr", "Orçado × Realizado", TrendingUp]].map(([id, nome, Ic]) => {
           const at = aba === id;
           return (
             <button key={id} onClick={() => setAba(id)} style={{
@@ -294,7 +295,9 @@ export default function Supervisor({ acesso }) {
         </div>
       )}
 
-      {aba === "resumo" ? (
+      {aba === "oxr" ? (
+        <OrcadoRealizado supNome={supNome} />
+      ) : aba === "resumo" ? (
         <ResumoVendedores dados={resumoVend} sujo={sujo} total={totalGeral}
           onVer={(v) => { setVendFiltro(v); setAba("projecao"); }} />
       ) : (
