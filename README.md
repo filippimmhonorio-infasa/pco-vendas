@@ -113,3 +113,18 @@ Indústria, Atacarejo, Varejo (ajustável em src/lib/planilha.js).
 ## IMPORTANTE ao atualizar para v4
 Atualize as Regras do Firestore (arquivo firestore.rules) — foi adicionada a
 coleção `realizado`. Sem isso, a importação de realizado dá erro de permissão.
+
+---
+
+## Novidades v5 — Período configurável e múltiplos cenários
+- Ao criar cenário, o admin escolhe o período (mês+ano inicial e final) via
+  seletores. O período pode CRUZAR o ano (ex.: Nov/2026–Fev/2027).
+- Toda a projeção, exportação Excel e Orçado×Realizado passam a usar os meses
+  do período do cenário (não mais Jul–Dez fixo).
+- Seletor de cenário no topo do admin: crie vários cenários e escolha o ativo.
+  Cenários antigos ficam guardados e podem ser reativados/consultados.
+- Botão "replicar" agora copia o PRIMEIRO mês do período para os demais.
+- Internamente os meses usam chave AAAA-MM, então a ordem cruza o ano corretamente.
+
+> Ao trocar de período, crie um cenário NOVO (o anterior fica arquivado).
+> Cada cenário tem sua própria base, projeção e realizado.

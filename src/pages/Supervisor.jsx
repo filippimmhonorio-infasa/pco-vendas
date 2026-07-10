@@ -3,7 +3,7 @@ import {
   getCenarioAtivo, lerBase,
   lerProjecaoCliente, salvarProjecaoCliente,
 } from "../lib/store.js";
-import { MESES } from "../lib/rateio.js";
+import { mesesDoCenario } from "../lib/periodo.js";
 import { exportarExcel, importarExcel, idCliente } from "../lib/exportacao.js";
 import OrcadoRealizado from "./OrcadoRealizado.jsx";
 import {
@@ -51,6 +51,9 @@ export default function Supervisor({ acesso }) {
     })();
   }, [supNome]);
 
+  // meses do período (derivados do cenário; cruza anos)
+  const meses = useMemo(() => (cenario ? mesesDoCenario(cenario) : []), [cenario]);
+
   // lista de vendedores do supervisor (para o filtro)
   const vendedores = useMemo(() => {
     if (!estrutura) return [];
@@ -82,7 +85,7 @@ export default function Supervisor({ acesso }) {
       let tot = 0;
       for (const c of it.pd.cli) {
         const id = idCliente(it.filial, it.canal, supNome, it.pc, c.cod, c.loja, c.vend);
-        for (const m of MESES) tot += projCli[id]?.vol?.[m] ?? c.vbCli;
+        for (const m of meses) tot += projCli[id]?.vol?.[m.key] ?? c.vbCli;
       }
       return tot;
     };
@@ -112,9 +115,9 @@ export default function Supervisor({ acesso }) {
     let vol = 0, rec = 0;
     for (const it of itens)
       for (const c of it.pd.cli)
-        for (const m of MESES) {
-          const v = volCliMes(it.filial, it.canal, it.pc, c, m);
-          const p = precoCliMes(it.filial, it.canal, it.pc, c, m);
+        for (const m of meses) {
+          const v = volCliMes(it.filial, it.canal, it.pc, c, m.key);
+          const p = precoCliMes(it.filial, it.canal, it.pc, c, m.key);
           vol += v; rec += v * p;
         }
     return { vol, rec };
@@ -129,9 +132,9 @@ export default function Supervisor({ acesso }) {
       for (const [pc, pd] of Object.entries(cData.prods)) {
         for (const c of pd.cli) {
           const v = acc[c.vend] || (acc[c.vend] = { vend: c.vend, vol: 0, rec: 0, nCli: new Set() });
-          for (const m of MESES) {
-            const vol = volCliMes(filial, canal, pc, c, m);
-            const pr = precoCliMes(filial, canal, pc, c, m);
+          for (const m of meses) {
+            const vol = volCliMes(filial, canal, pc, c, m.key);
+            const pr = precoCliMes(filial, canal, pc, c, m.key);
             v.vol += vol; v.rec += vol * pr;
           }
           v.nCli.add(c.cod);
@@ -155,21 +158,23 @@ export default function Supervisor({ acesso }) {
     setProjCli((prev) => {
       const cur = prev[id] || { vol: {}, preco: {} };
       const novo = { ...cur, vol: { ...cur.vol }, preco: { ...cur.preco }, sup: supNome };
-      for (const mm of MESES) {
-        if (novo.vol[mm] == null) novo.vol[mm] = c.vbCli;
-        if (novo.preco[mm] == null) novo.preco[mm] = c.pm;
+      for (const mm of meses) {
+        if (novo.vol[mm.key] == null) novo.vol[mm.key] = c.vbCli;
+        if (novo.preco[mm.key] == null) novo.preco[mm.key] = c.pm;
       }
       const val = num(valor);
-      if (replicar) { for (const mm of MESES) novo[tipo][mm] = val; }
+      if (replicar) { for (const mm of meses) novo[tipo][mm.key] = val; }
       else novo[tipo][m] = val;
       return { ...prev, [id]: novo };
     });
     setSujo(true); setSalvo(false);
   }
-  // replica o valor atual de Julho (vol) para os demais meses
+  // replica o valor do PRIMEIRO mês do período (vol) para os demais
   function replicarJul(filial, canal, pc, c) {
-    const julVal = volCliMes(filial, canal, pc, c, "Jul");
-    setCampoCli(filial, canal, pc, c, "vol", "Jul", julVal, true);
+    const m0 = meses[0]?.key;
+    if (!m0) return;
+    const v0 = volCliMes(filial, canal, pc, c, m0);
+    setCampoCli(filial, canal, pc, c, "vol", m0, v0, true);
   }
 
   async function salvarTudo() {
@@ -181,9 +186,9 @@ export default function Supervisor({ acesso }) {
         for (const [pc, pd] of Object.entries(cData.prods)) {
           for (const c of pd.cli) {
             const vol = {}, preco = {};
-            for (const m of MESES) {
-              vol[m] = volCliMes(filial, canal, pc, c, m);
-              preco[m] = precoCliMes(filial, canal, pc, c, m);
+            for (const m of meses) {
+              vol[m.key] = volCliMes(filial, canal, pc, c, m.key);
+              preco[m.key] = precoCliMes(filial, canal, pc, c, m.key);
             }
             linhas.push({
               filial, canal, sup: supNome, vend: c.vend,
@@ -199,7 +204,7 @@ export default function Supervisor({ acesso }) {
   }
 
   function exportar() {
-    exportarExcel(estrutura, projCli, `projecao_${supNome.replace(/\s+/g, "_")}.xlsx`);
+    exportarExcel(estrutura, projCli, meses, `projecao_${supNome.replace(/\s+/g, "_")}.xlsx`);
   }
   function escolherArquivo(e) {
     setImportInfo(null);
@@ -208,7 +213,7 @@ export default function Supervisor({ acesso }) {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const { itens: imp, erros } = importarExcel(reader.result, supNome);
+        const { itens: imp, erros } = importarExcel(reader.result, supNome, meses);
         if (erros.length) {
           setImportInfo({ tipo: "erro", msg: `Encontrei ${erros.length} problema(s). Nenhum dado foi salvo.`, erros: erros.slice(0, 8) });
           if (fileRef.current) fileRef.current.value = ""; return;
@@ -238,7 +243,7 @@ export default function Supervisor({ acesso }) {
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--amber)", letterSpacing: ".04em" }}>
           PROJEÇÃO POR PRODUTO · CLIENTE · VENDEDOR
         </div>
-        <h1 style={{ margin: "2px 0 0", fontSize: 24 }}>Projeção de vendas Jul–Dez</h1>
+        <h1 style={{ margin: "2px 0 0", fontSize: 24 }}>Projeção de vendas{meses.length ? ` ${meses[0].label} – ${meses[meses.length-1].label}` : ""}</h1>
         <p style={{ color: "var(--sub)", fontSize: 14, marginTop: 6, maxWidth: 720 }}>
           Cada cliente vem preenchido com a média dos últimos meses. Ajuste na tela ou,
           se preferir, exporte para Excel, edite e reimporte. Não esqueça de salvar.
@@ -337,7 +342,7 @@ export default function Supervisor({ acesso }) {
           {filtrados.length === 0
             ? <div className="card" style={{ color: "var(--sub)" }}>Nenhum produto para os filtros selecionados.</div>
             : filtrados.map((it) => (
-              <LinhaProduto key={it.combo + "|" + it.pc} it={it}
+              <LinhaProduto key={it.combo + "|" + it.pc} it={it} meses={meses}
                 volCliMes={volCliMes} precoCliMes={precoCliMes}
                 setCampoCli={setCampoCli} replicarJul={replicarJul} supNome={supNome} />
             ))}
@@ -389,15 +394,15 @@ function ResumoVendedores({ dados, sujo, total, onVer }) {
   );
 }
 
-function LinhaProduto({ it, volCliMes, precoCliMes, setCampoCli, replicarJul, supNome }) {
+function LinhaProduto({ it, meses, volCliMes, precoCliMes, setCampoCli, replicarJul, supNome }) {
   const [aberto, setAberto] = useState(false);
   const { filial, canal, pc, pd } = it;
 
   let volProd = 0, recProd = 0;
   for (const c of pd.cli)
-    for (const m of MESES) {
-      const v = volCliMes(filial, canal, pc, c, m);
-      const pr = precoCliMes(filial, canal, pc, c, m);
+    for (const m of meses) {
+      const v = volCliMes(filial, canal, pc, c, m.key);
+      const pr = precoCliMes(filial, canal, pc, c, m.key);
       volProd += v; recProd += v * pr;
     }
 
@@ -425,25 +430,25 @@ function LinhaProduto({ it, volCliMes, precoCliMes, setCampoCli, replicarJul, su
               <tr>
                 <th style={{ minWidth: 190 }}>Cliente</th>
                 <th style={{ minWidth: 150 }}>Vendedor</th>
-                {MESES.map((m) => <th key={m} className="num">{m}</th>)}
+                {meses.map((m) => <th key={m.key} className="num">{m.label}</th>)}
                 <th className="num">Total</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {pd.cli.map((c) => {
-                const totCli = MESES.reduce((a, m) => a + volCliMes(filial, canal, pc, c, m), 0);
+                const totCli = meses.reduce((a, m) => a + volCliMes(filial, canal, pc, c, m.key), 0);
                 return (
                   <tr key={`${c.cod}|${c.loja}|${c.vend}`}>
                     <td>{c.n}</td>
                     <td style={{ fontSize: 12.5, color: "var(--sub)" }}>
                       <Users size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />{c.vend}
                     </td>
-                    {MESES.map((m) => (
-                      <td key={m} className="num">
+                    {meses.map((m) => (
+                      <td key={m.key} className="num">
                         <input className="input" style={inNum} type="number" step="0.001"
-                          value={round(volCliMes(filial, canal, pc, c, m), 3)}
-                          onChange={(e) => setCampoCli(filial, canal, pc, c, "vol", m, e.target.value)} />
+                          value={round(volCliMes(filial, canal, pc, c, m.key), 3)}
+                          onChange={(e) => setCampoCli(filial, canal, pc, c, "vol", m.key, e.target.value)} />
                       </td>
                     ))}
                     <td className="num" style={{ fontWeight: 600 }}>{fmt(totCli)}</td>
@@ -460,7 +465,7 @@ function LinhaProduto({ it, volCliMes, precoCliMes, setCampoCli, replicarJul, su
             </tbody>
           </table>
           <p style={{ fontSize: 12, color: "var(--sub)", marginTop: 10 }}>
-            O botão <Copy size={12} style={{ verticalAlign: "-2px" }} /> replica o volume de <b>Julho</b> daquele cliente para Ago–Dez.
+            O botão <Copy size={12} style={{ verticalAlign: "-2px" }} /> replica o volume do <b>primeiro mês</b> daquele cliente para os demais.
             Para editar preços por mês, use "Exportar Excel" (traz as colunas de preço), edite e reimporte.
           </p>
         </div>

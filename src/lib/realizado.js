@@ -1,5 +1,6 @@
 // src/lib/realizado.js — lê a planilha de REALIZADO e agrega por chave/mês
 import * as XLSX from "xlsx";
+import { mesKeyDeTexto } from "./periodo.js";
 
 const FILIAL_LABEL = {
   "010101": "STA TEREZA", "020105": "CURITIBA", "020101": "CUIABÁ",
@@ -7,11 +8,6 @@ const FILIAL_LABEL = {
 const FILIAIS_OK = ["STA TEREZA", "CURITIBA", "CUIABÁ"];
 const CANAIS_OK = ["INDUSTRIA", "ATACAREJO", "VAREJO"];
 
-// mapeia "mmm aaaa" (pt) -> número do mês
-const MES_PT = {
-  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
-  jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
-};
 
 const COLS = {
   filial: ["filial", "Filial"],
@@ -35,18 +31,6 @@ function codProduto(p) { const s = String(p); return s.includes(" - ") ? s.split
 function codCliente(c) { const s = String(c); return s.includes(" - ") ? s.split(" - ")[0].trim() : s.trim(); }
 function filialLabel(f) { return FILIAL_LABEL[String(f).trim()] || String(f).trim(); }
 
-function mesNum(v) {
-  if (v == null) return null;
-  const s = String(v).trim().toLowerCase();
-  // "jul 2026" | "jul/2026" | "07/2026" | "2026-07"
-  const m3 = s.slice(0, 3);
-  if (MES_PT[m3]) return MES_PT[m3];
-  const mBarra = s.match(/(\d{1,2})[\/\-](\d{4})/);
-  if (mBarra) return parseInt(mBarra[1], 10);
-  const mIso = s.match(/(\d{4})[\/\-](\d{1,2})/);
-  if (mIso) return parseInt(mIso[2], 10);
-  return null;
-}
 
 /**
  * Processa a planilha de realizado.
@@ -78,8 +62,8 @@ export function processarRealizado(arrayBuffer) {
     if (!FILIAIS_OK.includes(filial)) { descartadas++; continue; }
     const canal = String(row[col.canal] ?? "").trim().toUpperCase();
     if (!CANAIS_OK.includes(canal)) { descartadas++; continue; }
-    const mes = mesNum(row[col.mes]);
-    if (!mes) { descartadas++; continue; }
+    const mesKey = mesKeyDeTexto(row[col.mes]);
+    if (!mesKey) { descartadas++; continue; }
 
     const sup = String(row[col.supervisor] ?? "").trim();
     const vend = temVend ? String(row[col.vendedor] ?? "").trim() : sup;
@@ -93,17 +77,17 @@ export function processarRealizado(arrayBuffer) {
     if (temFat) rec = Number(row[col.fat]) || 0;
     else { const pm = Number(row[col.pm]) || 0; rec = vol * pm; }
 
-    mesesSet.add(mes);
+    mesesSet.add(mesKey);
     const chave = `${filial}|${canal}|${sup}|${vend}|${produto}|${cliente}|${loja}`;
     const it = mapa[chave] || (mapa[chave] = {
       filial, canal, sup, vend, produto, cliente, loja, mesesVol: {}, mesesRec: {},
     });
-    it.mesesVol[mes] = (it.mesesVol[mes] || 0) + vol;
-    it.mesesRec[mes] = (it.mesesRec[mes] || 0) + rec;
+    it.mesesVol[mesKey] = (it.mesesVol[mesKey] || 0) + vol;
+    it.mesesRec[mesKey] = (it.mesesRec[mesKey] || 0) + rec;
   }
 
   const itens = Object.values(mapa);
-  const meses = [...mesesSet].sort((a, b) => a - b);
+  const meses = [...mesesSet].sort();
   const totVol = itens.reduce((a, it) => a + Object.values(it.mesesVol).reduce((x, y) => x + y, 0), 0);
   const totRec = itens.reduce((a, it) => a + Object.values(it.mesesRec).reduce((x, y) => x + y, 0), 0);
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { lerProjecaoCliente, lerRealizado, getCenarioAtivo } from "../lib/store.js";
 import { montarComparativo } from "../lib/comparativo.js";
+import { mesesDoCenario } from "../lib/periodo.js";
 import { TrendingUp, TrendingDown, Minus, BarChart3, AlertTriangle } from "lucide-react";
 
 const NIVEIS = [
@@ -38,18 +39,27 @@ export default function OrcadoRealizado({ supNome = null }) {
     })();
   }, [supNome]);
 
-  // meses que têm realizado (a partir dos dados)
+  // meses do período do cenário
+  const mesesPeriodo = useMemo(() => (cenario ? mesesDoCenario(cenario) : []), [cenario]);
+
+  // chaves de mês que têm realizado
   const mesesRealizados = useMemo(() => {
     const set = new Set();
     for (const r of realizado)
-      for (const k of Object.keys(r.mesesVol || {})) set.add(Number(k));
-    return [...set].sort((a, b) => a - b);
+      for (const k of Object.keys(r.mesesVol || {})) set.add(k);
+    return [...set].sort();
   }, [realizado]);
 
+  // interseção: meses do período que já têm realizado (comparação justa)
+  const mesKeysComparar = useMemo(() => {
+    const doPeriodo = new Set(mesesPeriodo.map((m) => m.key));
+    return mesesRealizados.filter((k) => doPeriodo.has(k));
+  }, [mesesPeriodo, mesesRealizados]);
+
   const comp = useMemo(() => {
-    if (!mesesRealizados.length) return null;
-    return montarComparativo(projcli, realizado, mesesRealizados, nivel);
-  }, [projcli, realizado, mesesRealizados, nivel]);
+    if (!mesKeysComparar.length) return null;
+    return montarComparativo(projcli, realizado, mesKeysComparar, nivel);
+  }, [projcli, realizado, mesKeysComparar, nivel]);
 
   if (carregando) return <p style={{ color: "var(--sub)" }}><span className="spin" /> Carregando comparativo…</p>;
   if (erro) return <div style={aviso("bad")}><AlertTriangle size={16} /> {erro}</div>;
@@ -59,9 +69,15 @@ export default function OrcadoRealizado({ supNome = null }) {
       <BarChart3 size={26} style={{ opacity: .5 }} />
       <p>Ainda não há dados de realizado importados.{!supNome && " Importe na aba \"Realizado\"."}</p>
     </div>;
+  if (!comp)
+    return <div className="card" style={{ textAlign: "center", color: "var(--sub)" }}>
+      <BarChart3 size={26} style={{ opacity: .5 }} />
+      <p>O realizado importado não coincide com os meses do período deste cenário
+      ({mesesPeriodo.map((m) => m.label).join(", ")}). Verifique se a planilha de
+      realizado é do período certo.</p>
+    </div>;
 
-  const NUM_MES = { 7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez" };
-  const periodo = mesesRealizados.map((m) => NUM_MES[m]).join(", ");
+  const periodo = mesesPeriodo.filter((m) => mesKeysComparar.includes(m.key)).map((m) => m.label).join(", ");
 
   return (
     <div>

@@ -1,56 +1,38 @@
-// src/lib/comparativo.js — cruza orçado (projcli) com realizado, acumulado até o mês
-import { MESES } from "./rateio.js";
-
-// número do mês -> nome curto
-const NUM_MES = { 7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez" };
+// src/lib/comparativo.js — cruza orçado (projcli) com realizado, por chave de mês (AAAA-MM)
 
 /**
- * Monta o comparativo Orçado × Realizado.
- * @param projcli   docs de projeção por cliente: [{filial,canal,sup,vend,produto,cliente,loja, vol:{Jul..}, preco:{Jul..}}]
- * @param realizado docs de realizado: [{...mesmasChaves, mesesVol:{7..}, mesesRec:{7..}}]
- * @param mesesRealizados  array de números de mês que têm realizado (ex: [7,8])
- * @param nivel     'filial' | 'canal' | 'supervisor' | 'vendedor' | 'produto'
- * @returns { linhas:[{chave, label, volOrc, volReal, recOrc, recReal, difVol, atingVol, ...}], totais:{} }
- *
- * Regra "acumulado até o mês": só somam os meses presentes em mesesRealizados,
- * tanto no orçado quanto no realizado, para comparar períodos equivalentes.
+ * @param projcli    [{...chaves, vol:{mesKey..}, preco:{mesKey..}}]
+ * @param realizado  [{...chaves, mesesVol:{mesKey..}, mesesRec:{mesKey..}}]
+ * @param mesKeys    chaves de mês a comparar (interseção período × realizado), ex ["2026-08","2026-09"]
+ * @param nivel      'filial'|'canal'|'supervisor'|'vendedor'|'produto'
  */
-export function montarComparativo(projcli, realizado, mesesRealizados, nivel) {
-  const mesesNomes = mesesRealizados.map((n) => NUM_MES[n]).filter(Boolean);
-
-  const chaveDe = (r, isReal) => {
-    const filial = r.filial, canal = r.canal;
-    const sup = r.sup, vend = r.vend, produto = r.produto;
+export function montarComparativo(projcli, realizado, mesKeys, nivel) {
+  const chaveDe = (r) => {
     switch (nivel) {
-      case "filial": return filial;
-      case "canal": return `${filial}|${canal}`;
-      case "supervisor": return `${filial}|${canal}|${sup}`;
-      case "vendedor": return vend || "(sem vendedor)";
-      case "produto": return produto;
-      default: return filial;
+      case "filial": return r.filial;
+      case "canal": return `${r.filial}|${r.canal}`;
+      case "supervisor": return `${r.filial}|${r.canal}|${r.sup}`;
+      case "vendedor": return r.vend || "(sem vendedor)";
+      case "produto": return r.produto;
+      default: return r.filial;
     }
   };
-
   const acc = {};
   const get = (k) => (acc[k] || (acc[k] = { chave: k, volOrc: 0, volReal: 0, recOrc: 0, recReal: 0 }));
 
-  // orçado: soma apenas os meses realizados (nomes)
   for (const p of projcli) {
-    const k = chaveDe(p, false);
-    const a = get(k);
-    for (const mn of mesesNomes) {
-      const v = p.vol?.[mn] ?? 0;
-      const pr = p.preco?.[mn] ?? 0;
+    const a = get(chaveDe(p));
+    for (const mk of mesKeys) {
+      const v = p.vol?.[mk] ?? 0;
+      const pr = p.preco?.[mk] ?? 0;
       a.volOrc += v; a.recOrc += v * pr;
     }
   }
-  // realizado: soma apenas os meses realizados (números)
   for (const r of realizado) {
-    const k = chaveDe(r, true);
-    const a = get(k);
-    for (const mnum of mesesRealizados) {
-      a.volReal += r.mesesVol?.[mnum] ?? 0;
-      a.recReal += r.mesesRec?.[mnum] ?? 0;
+    const a = get(chaveDe(r));
+    for (const mk of mesKeys) {
+      a.volReal += r.mesesVol?.[mk] ?? 0;
+      a.recReal += r.mesesRec?.[mk] ?? 0;
     }
   }
 
@@ -74,7 +56,7 @@ export function montarComparativo(projcli, realizado, mesesRealizados, nivel) {
   totais.atingVol = totais.volOrc > 0 ? totais.volReal / totais.volOrc : null;
   totais.atingRec = totais.recOrc > 0 ? totais.recReal / totais.recOrc : null;
 
-  return { linhas, totais, mesesNomes };
+  return { linhas, totais };
 }
 
 const FL = { "STA TEREZA": "Sta Tereza", "CURITIBA": "Curitiba", "CUIABÁ": "Cuiabá" };

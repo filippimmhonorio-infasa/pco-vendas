@@ -29,7 +29,7 @@ export default function Login() {
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ margin: 0, fontSize: 22, color: "var(--navy)" }}>PCO de Vendas</h1>
           <p style={{ margin: "4px 0 0", color: "var(--sub)", fontSize: 13 }}>
-            AB AgroBrasil · projeção de volume e preço Jul–Dez
+            AB AgroBrasil · planejamento de vendas
           </p>
         </div>
 

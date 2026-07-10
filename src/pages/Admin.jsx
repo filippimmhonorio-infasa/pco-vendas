@@ -4,8 +4,10 @@ import { processarRealizado } from "../lib/realizado.js";
 import {
   getCenarioAtivo, criarCenario, gravarBase, lerBase,
   listarAcessos, salvarAcesso, gravarRealizado,
+  listarCenarios, setCenarioAtivo,
 } from "../lib/store.js";
 import OrcadoRealizado from "./OrcadoRealizado.jsx";
+import { mesesDoCenario, NOMES_MES } from "../lib/periodo.js";
 import {
   Upload, FileSpreadsheet, CheckCircle2, Users, BarChart3,
   Building2, AlertTriangle, Plus, Loader2, TrendingUp, ClipboardCheck,
@@ -22,14 +24,41 @@ const ABAS = [
 export default function Admin({ acesso }) {
   const [aba, setAba] = useState("base");
   const [cenario, setCenario] = useState(null);
+  const [cenarios, setCenarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
-  useEffect(() => {
-    getCenarioAtivo().then((c) => { setCenario(c); setCarregando(false); });
-  }, []);
+  async function recarregar() {
+    const [c, lista] = await Promise.all([getCenarioAtivo(), listarCenarios()]);
+    setCenario(c); setCenarios(lista); setCarregando(false);
+  }
+  useEffect(() => { recarregar(); }, []);
+
+  async function trocarAtivo(id) {
+    if (!id || id === cenario?.id) return;
+    await setCenarioAtivo(id);
+    await recarregar();
+  }
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 20px 60px" }}>
+      {/* seletor de cenário */}
+      {cenarios.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "var(--sub)", fontWeight: 600 }}>Cenário ativo:</span>
+          <select className="input" style={{ maxWidth: 340 }} value={cenario?.id || ""}
+            onChange={(e) => trocarAtivo(e.target.value)}>
+            {cenarios.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nome}{c.ativo ? " (ativo)" : ""}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 12, color: "var(--sub)" }}>
+            {cenarios.length} cenário(s) · trocar aqui muda o que todos veem
+          </span>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginBottom: 20, borderBottom: "1px solid var(--line)" }}>
         {ABAS.map((a) => {
           const Ic = a.icon;
@@ -49,7 +78,7 @@ export default function Admin({ acesso }) {
 
       {carregando
         ? <p style={{ color: "var(--sub)" }}><span className="spin" /> Carregando cenário…</p>
-        : aba === "base" ? <AbaBase cenario={cenario} setCenario={setCenario} />
+        : aba === "base" ? <AbaBase cenario={cenario} setCenario={setCenario} onCenarioChange={recarregar} />
         : aba === "consolidado" ? <AbaConsolidado cenario={cenario} />
         : aba === "realizado" ? <AbaRealizado cenario={cenario} setCenario={setCenario} />
         : aba === "oxr" ? <OrcadoRealizado />
@@ -67,7 +96,6 @@ function AbaRealizado({ cenario, setCenario }) {
   const [progresso, setProgresso] = useState(null);
   const [ok, setOk] = useState(false);
 
-  const NUM_MES = { 7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez" };
 
   function escolher(e) {
     setErro(null); setOk(false); setPreview(null);
@@ -124,7 +152,7 @@ function AbaRealizado({ cenario, setCenario }) {
             <Stat label="Linhas lidas" v={preview.resumo.linhasLidas} />
             <Stat label="Descartadas" v={preview.resumo.descartadas} />
             <Stat label="Registros" v={preview.resumo.itens} />
-            <Stat label="Meses" v={preview.meses.map((m) => NUM_MES[m]).join(", ")} />
+            <Stat label="Meses" v={preview.meses.map(labelMesKey).join(", ")} />
             <Stat label="Volume total" v={fmt(preview.resumo.volTotal) + " t"} />
             <Stat label="Receita total" v={fmtBRL(preview.resumo.recTotal)} />
           </div>
@@ -141,11 +169,15 @@ function AbaRealizado({ cenario, setCenario }) {
 }
 
 /* ---------- Aba: Base (upload da planilha) ---------- */
-function AbaBase({ cenario, setCenario }) {
+function AbaBase({ cenario, setCenario, onCenarioChange }) {
   const fileRef = useRef();
   const [preview, setPreview] = useState(null);
   const [erro, setErro] = useState(null);
-  const [nome, setNome] = useState("PCO Jul-Dez/2026");
+  const [nome, setNome] = useState("PCO Ago-Dez/2026");
+  const [mesIni, setMesIni] = useState(8);
+  const [anoIni, setAnoIni] = useState(2026);
+  const [mesFim, setMesFim] = useState(12);
+  const [anoFim, setAnoFim] = useState(2026);
   const [gravando, setGravando] = useState(false);
   const [progresso, setProgresso] = useState(null);
   const [ok, setOk] = useState(false);
@@ -167,11 +199,19 @@ function AbaBase({ cenario, setCenario }) {
 
   async function confirmar() {
     if (!preview) return;
+    // valida período
+    if (anoFim < anoIni || (anoFim === anoIni && mesFim < mesIni)) {
+      setErro("O mês/ano final não pode ser anterior ao inicial.");
+      return;
+    }
     setGravando(true); setErro(null);
     try {
       const cenarioId = nome.trim().replace(/[/\\.#$[\]\s]+/g, "_");
       await criarCenario(cenarioId, {
-        nome: nome.trim(), ano: 2026, mesIni: 7, mesFim: 12,
+        nome: nome.trim(),
+        mesIni: Number(mesIni), anoIni: Number(anoIni),
+        mesFim: Number(mesFim), anoFim: Number(anoFim),
+        ano: Number(anoIni),
         baseMeses: `${preview.resumo.nMeses} meses`,
         resumo: preview.resumo,
       });
@@ -179,6 +219,7 @@ function AbaBase({ cenario, setCenario }) {
         (feito, total) => setProgresso({ feito, total }));
       const c = await getCenarioAtivo();
       setCenario(c); setOk(true); setPreview(null);
+      onCenarioChange?.();
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
       setErro("Falha ao gravar: " + err.message);
@@ -193,6 +234,9 @@ function AbaBase({ cenario, setCenario }) {
           <div>
             <div style={{ fontSize: 12, color: "var(--sub)", fontWeight: 600 }}>CENÁRIO ATIVO</div>
             <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cenario.nome}</div>
+            <div style={{ fontSize: 12.5, color: "var(--blue)", marginTop: 2 }}>
+              Período: {mesesDoCenario(cenario).map((m) => m.label).join(" · ")}
+            </div>
             {cenario.resumo && (
               <div style={{ fontSize: 13, color: "var(--sub)", marginTop: 4 }}>
                 {cenario.resumo.combos} combinações · {cenario.resumo.produtos} produtos ·{" "}
@@ -217,6 +261,19 @@ function AbaBase({ cenario, setCenario }) {
         <label style={lbl}>Nome do cenário</label>
         <input className="input" style={{ maxWidth: 320 }} value={nome}
           onChange={(e) => setNome(e.target.value)} />
+
+        <label style={{ ...lbl, marginTop: 14 }}>Período da projeção</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "var(--sub)" }}>De</span>
+          <SelMes v={mesIni} set={setMesIni} />
+          <SelAno v={anoIni} set={setAnoIni} />
+          <span style={{ fontSize: 13, color: "var(--sub)" }}>até</span>
+          <SelMes v={mesFim} set={setMesFim} />
+          <SelAno v={anoFim} set={setAnoFim} />
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sub)", marginTop: 6 }}>
+          Os supervisores projetarão exatamente esses meses. O período pode cruzar o ano.
+        </p>
 
         <div style={{ marginTop: 16 }}>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={escolher}
@@ -431,6 +488,21 @@ function SemCenario() {
     <p>Nenhum cenário ativo. Importe a base na aba "Base do cenário".</p>
   </div>;
 }
+function SelMes({ v, set }) {
+  return (
+    <select className="input" style={{ width: 90 }} value={v} onChange={(e) => set(Number(e.target.value))}>
+      {NOMES_MES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
+    </select>
+  );
+}
+function SelAno({ v, set }) {
+  const anos = [2025, 2026, 2027, 2028];
+  return (
+    <select className="input" style={{ width: 90 }} value={v} onChange={(e) => set(Number(e.target.value))}>
+      {anos.map((a) => <option key={a} value={a}>{a}</option>)}
+    </select>
+  );
+}
 function Stat({ label, v, big }) {
   return <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px" }}>
     <div style={{ fontSize: 11, color: "var(--sub)", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
@@ -445,3 +517,9 @@ const lbl = { display:"block", fontSize:12, fontWeight:600, color:"var(--sub)", 
 const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10 };
 const aviso = (tipo)=>({ marginTop:12, padding:"9px 13px", borderRadius:8, display:"flex", gap:8, alignItems:"center", fontSize:13,
   background: tipo==="bad"?"#fdecea":"#eafaf1", color: tipo==="bad"?"var(--bad)":"var(--ok)" });
+
+const _NOMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+function labelMesKey(k) {
+  const [a, m] = String(k).split("-");
+  return `${_NOMES[parseInt(m,10)-1]}/${a.slice(-2)}`;
+}

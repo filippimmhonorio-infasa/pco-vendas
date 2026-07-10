@@ -29,6 +29,16 @@ export async function setCenarioAtivo(cenarioId) {
   await setDoc(CFG, { cenarioId });
 }
 
+// lista todos os cenários (para o seletor e arquivados)
+export async function listarCenarios() {
+  const qs = await getDocs(collection(db, "cenarios"));
+  const cfg = await getDoc(CFG);
+  const ativo = cfg.exists() ? cfg.data().cenarioId : null;
+  return qs.docs
+    .map((d) => ({ id: d.id, ...d.data(), ativo: d.id === ativo }))
+    .sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+}
+
 export async function criarCenario(cenarioId, meta) {
   await setDoc(doc(db, "cenarios", cenarioId), {
     ...meta, criadoEm: Date.now(),
